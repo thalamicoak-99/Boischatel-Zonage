@@ -9,7 +9,7 @@ var map = new ol.Map({
 });
 
 //initial view - epsg:3857 coordinates if not "Match project CRS"
-map.getView().fit([-7920852.766001, 5925050.603391, -7916864.235622, 5927257.275354], map.getSize());
+map.getView().fit([-7920794.462252, 5925221.933122, -7916805.867631, 5927428.622117], map.getSize());
 
 //full zooms only
 map.getView().setProperties({constrainResolution: true});
@@ -870,6 +870,18 @@ let measuring = false;
 
 //layer search
 
+var searchLayer = new SearchLayer({
+    layer: lyr_20231121_cadastre_boischatel_2,
+    colName: 'NoLot',
+    zoom: 10,
+    collapsed: true,
+    map: map,
+    maxResults: 10,
+});
+map.addControl(searchLayer);
+document.getElementsByClassName('search-layer')[0].getElementsByTagName('button')[0].className += ' fa fa-binoculars';
+document.getElementsByClassName('search-layer-input-search')[0].placeholder = 'Search feature ...';
+    
 
 //scalebar
 
