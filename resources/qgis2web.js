@@ -9,7 +9,7 @@ var map = new ol.Map({
 });
 
 //initial view - epsg:3857 coordinates if not "Match project CRS"
-map.getView().fit([-7920794.462252, 5925221.933122, -7916805.867631, 5927428.622117], map.getSize());
+map.getView().fit([-7920228.802940, 5926033.770254, -7916239.973770, 5928240.409024], map.getSize());
 
 //full zooms only
 map.getView().setProperties({constrainResolution: true});
@@ -871,7 +871,7 @@ let measuring = false;
 //layer search
 
 var searchLayer = new SearchLayer({
-    layer: lyr_20231121_cadastre_boischatel_2,
+    layer: lyr_20231121_cadastre_boischatel_1,
     colName: 'NoLot',
     zoom: 10,
     collapsed: true,
