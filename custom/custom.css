@@ -1,0 +1,8 @@
+.ol-geocoder {
+  top: 10px;
+  left: 60px;
+}
+
+.ol-geocoder input {
+  width: 280px;
+}
