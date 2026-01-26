@@ -46,15 +46,14 @@
         }
         </style>
         <title></title>
-
-        <!-- Barre de recherche OpenStreetMap -->
-        <link rel="stylesheet" href="https://unpkg.com/ol-geocoder/dist/ol-geocoder.min.css">
-        <script src="https://unpkg.com/ol-geocoder"></script>
-
         <!-- TES styles -->
         <link rel="stylesheet" href="./custom/custom.css">
     </head>
     <body>
+        <div id="search-container">
+          <input id="search-input" type="text" placeholder="Rechercher une adresse à Boischatel">
+          <button id="search-btn">🔍</button>
+        </div>
         <div id="map">
             <div id="popup" class="ol-popup">
                 <a href="#" id="popup-closer" class="ol-popup-closer"></a>
