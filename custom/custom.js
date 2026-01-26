@@ -5,13 +5,23 @@ window.addEventListener('load', function () {
   if (!map) return;
 
   // -------------------------------------------------
-  // 1) Récupérer la couche cadastre
+  // 1) Récupérer la couche cadastre (par champ)
   // -------------------------------------------------
-  // IMPORTANT : adapte le nom si différent dans ta map
   let cadastreLayer = null;
 
   map.getLayers().forEach(layer => {
-    if (layer.get('title') === '20231121_cadastre_boischatel_1') {
+    if (!layer.getSource) return;
+
+    const src = layer.getSource();
+    if (!src || !src.getFeatures) return;
+
+    const feats = src.getFeatures();
+    if (!feats.length) return;
+
+    // On vérifie si la couche contient le champ A_Matricule
+    const props = feats[0].getProperties();
+    if (props['Info info lot — A_Matricule'] !== undefined &&
+        props['NoLot'] !== undefined) {
       cadastreLayer = layer;
     }
   });
@@ -47,7 +57,7 @@ window.addEventListener('load', function () {
     const features = source.getFeatures();
 
     const results = features.filter(f => {
-      const matricule = (f.get('A_Matricule') || '').toString();
+      const matricule = (f.get('Info info lot — A_Matricule') || '').toString();
       const nolot = (f.get('NoLot') || '').toString();
 
       return matricule.toLowerCase().includes(query.toLowerCase()) ||
