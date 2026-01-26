@@ -13,9 +13,10 @@ window.addEventListener('load', function () {
   var geocoder = new Geocoder('nominatim', {
     provider: 'osm',
     lang: 'fr',
-    placeholder: 'Rechercher une adresse ou un lieu',
+    placeholder: 'Rechercher une adresse à Boischatel',
     limit: 5,
     debug: false,
+    countrycodes: 'ca',           // 🇨🇦 Canada seulement
     autoComplete: true,
     keepOpen: false
   });
