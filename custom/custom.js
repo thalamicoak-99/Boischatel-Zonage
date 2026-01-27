@@ -8,32 +8,45 @@ window.addEventListener('load', function () {
   const searchBtn = document.getElementById('search-btn');
   
   // -------------------------------------------------
-  // 1) Trouver la couche cadastre par ses champs
+  // 1) RÉCUPÉRER LA COUCHE CADASTRE DANS LE GROUPE
   // -------------------------------------------------
   let cadastreLayer = null;
-
+  
   map.getLayers().forEach(layer => {
-    if (!layer.getSource) return;
-    const src = layer.getSource();
-    if (!src.getFeatures) return;
-
-    const feats = src.getFeatures();
-    if (!feats.length) return;
-
-    const props = feats[0].getProperties();
-    if (props['NoLot'] !== undefined &&
-        props['Info info lot — A_Matricule'] !== undefined) {
-      cadastreLayer = layer;
+  
+    // On cherche le groupe
+    if (layer instanceof ol.layer.Group &&
+        layer.get('title') === 'Zone dossier de travail') {
+  
+      // On parcourt les couches du groupe
+      layer.getLayers().forEach(subLayer => {
+  
+        // qgis2web donne souvent le nom ici
+        if (subLayer.getSource &&
+            subLayer.getSource() instanceof ol.source.Vector) {
+  
+          const feats = subLayer.getSource().getFeatures();
+          if (!feats.length) return;
+  
+          const props = feats[0].getProperties();
+  
+          // Signature du cadastre
+          if (props['NoLot'] !== undefined &&
+              props['Info info lot — A_Matricule'] !== undefined) {
+            cadastreLayer = subLayer;
+          }
+        }
+      });
     }
   });
-
+  
   if (!cadastreLayer) {
-    console.warn('Couche cadastre non trouvée');
+    console.warn("Couche cadastre non trouvée !");
     return;
   }
-
+  
   // -------------------------------------------------
-  // 2) Couche de surbrillance (corrigée)
+  // 2) COUCHE DE SURBRILLANCE (CORRIGÉE)
   // -------------------------------------------------
   const highlightLayer = new ol.layer.Vector({
     source: new ol.source.Vector(),
@@ -51,7 +64,7 @@ window.addEventListener('load', function () {
   map.addLayer(highlightLayer);
 
   // -------------------------------------------------
-  // 3) Normalisation des valeurs
+  // 3) NORMALISATION (espaces, tirets, etc.)
   // -------------------------------------------------
   function normalize(val) {
     return val
@@ -61,7 +74,7 @@ window.addEventListener('load', function () {
   }
 
   // -------------------------------------------------
-  // 4) Recherche flexible
+  // 4) RECHERCHE FLEXIBLE DANS LE CADASTRE
   // -------------------------------------------------
   function searchCadastre(query) {
     const q = normalize(query);
@@ -75,7 +88,7 @@ window.addEventListener('load', function () {
   }
 
   // -------------------------------------------------
-  // 5) Afficher suggestions
+  // 5) AFFICHER SUGGESTIONS (3 MAX)
   // -------------------------------------------------
   function showSuggestions(features) {
     suggestionsBox.innerHTML = '';
@@ -97,15 +110,13 @@ window.addEventListener('load', function () {
   }
 
   // -------------------------------------------------
-  // 6) Sélection + zoom intelligent
+  // 6) SÉLECTION + ZOOM ADAPTÉ À L’ENTITÉ
   // -------------------------------------------------
   function selectFeature(feature) {
     highlightLayer.getSource().clear();
     highlightLayer.getSource().addFeature(feature);
 
-    const extent = feature.getGeometry().getExtent();
-
-    map.getView().fit(extent, {
+    map.getView().fit(feature.getGeometry().getExtent(), {
       padding: [50, 50, 50, 50],
       duration: 700,
       maxZoom: 18
@@ -113,34 +124,29 @@ window.addEventListener('load', function () {
   }
 
   // -------------------------------------------------
-  // 7) Événement sur saisie
+  // 7) SAISIE TEMPS RÉEL
   // -------------------------------------------------
   input.addEventListener('input', () => {
     const results = searchCadastre(input.value);
-    if (results.length) {
-      showSuggestions(results);
-    } else {
+    results.length ? showSuggestions(results) : suggestionsBox.innerHTML = '';
+  });
+
+  // -------------------------------------------------
+  // 8) BOUTON 🔍 + ENTER
+  // -------------------------------------------------
+  searchBtn.addEventListener('click', () => {
+    const results = searchCadastre(input.value);
+
+    if (results.length === 1) {
+      selectFeature(results[0]);
       suggestionsBox.innerHTML = '';
+    } else if (results.length > 1) {
+      showSuggestions(results);
     }
   });
-
-  searchBtn.addEventListener('click', () => {
-  const results = searchCadastre(input.value);
-
-  if (results.length === 1) {
-    // Un seul résultat → zoom direct
-    selectFeature(results[0]);
-    suggestionsBox.innerHTML = '';
-  } else if (results.length > 1) {
-    // Plusieurs → afficher suggestions
-    showSuggestions(results);
-  }
-  });
-
 
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      searchBtn.click();
-    }
+    if (e.key === 'Enter') searchBtn.click();
   });
+
 });
