@@ -1,3 +1,4 @@
+
 window.addEventListener('load', function () {
 
   const map = window.map || window.map_1 || window.map_2;
@@ -186,7 +187,7 @@ window.addEventListener('load', function () {
   function zoomToAddress(lon, lat) {
     map.getView().animate({
       center: ol.proj.fromLonLat([parseFloat(lon), parseFloat(lat)]),
-      zoom: 16,
+      zoom: 20,
       duration: 700
     });
   }
@@ -218,7 +219,7 @@ window.addEventListener('load', function () {
    if (!query) return;
 
     // Exemple de rectangle : sud-ouest (long_min, lat_min) et nord-est (long_max, lat_max)
-    const viewbox = '46.94249,-71.20995,-71.08772'; // ajuster selon la zone de Boischatel
+    const view = '46.94249,-71.20995,46.89393,-71.09117'; // ajuster selon la zone de Boischatel
 
       const url = 'https://nominatim.openstreetmap.org/search?' +
         new URLSearchParams({
@@ -226,7 +227,7 @@ window.addEventListener('load', function () {
           format: 'json',
           limit: 5,
           countrycodes: 'ca'
-          viewbox: viewbox,
+          viewbox: view,
           bounded: 1
         });
   
