@@ -5,15 +5,15 @@ window.addEventListener('load', function () {
 
   const input = document.getElementById('search-input');
   const btn = document.getElementById('search-btn');
-  const suggestionsBox = document.getElementById('search-suggestions');
+  const box = document.getElementById('search-suggestions');
 
   // -------------------------------------------------
-  // Couche de surbrillance
+  // Couche de surbrillance (robuste)
   // -------------------------------------------------
   const highlightLayer = new ol.layer.Vector({
     source: new ol.source.Vector(),
     style: new ol.style.Style({
-      stroke: new ol.style.Stroke({ color: 'red', width: 3 }),
+      stroke: new ol.style.Stroke({ color: '#ff0000', width: 3 }),
       fill: new ol.style.Fill({ color: 'rgba(255,0,0,0.25)' })
     })
   });
@@ -32,11 +32,9 @@ window.addEventListener('load', function () {
       const feats = src.getFeatures();
       if (!feats.length) return;
 
-      const props = feats[0].getProperties();
-      if (
-        props['NoLot'] !== undefined &&
-        props['Info info lot — A_Matricule'] !== undefined
-      ) {
+      const p = feats[0].getProperties();
+      if (p['NoLot'] !== undefined &&
+          p['Info info lot — A_Matricule'] !== undefined) {
         found = layer;
       }
     });
@@ -45,33 +43,49 @@ window.addEventListener('load', function () {
   }
 
   // -------------------------------------------------
-  // Suggestions cadastre
+  // Normalisation lot (IGNORE ESPACES)
   // -------------------------------------------------
-  function cadastreSuggestions(query) {
-    const layer = getCadastreLayer();
-    if (!layer) return [];
-
-    const q = query.toLowerCase();
-    return layer.getSource().getFeatures()
-      .filter(f => {
-        return (
-          (f.get('NoLot') || '').toLowerCase().includes(q) ||
-          (f.get('Info info lot — A_Matricule') || '').toLowerCase().includes(q)
-        );
-      })
-      .slice(0, 5);
+  function normalizeLot(value) {
+    return value.toString().replace(/\s+/g, '');
   }
 
   // -------------------------------------------------
-  // Suggestions OSM
+  // Recherche cadastre (lots / matricules)
   // -------------------------------------------------
-  function osmSuggestions(query) {
+  function cadastreSearch(query) {
+    const layer = getCadastreLayer();
+    if (!layer) return { lots: [], mats: [] };
+
+    const q = normalizeLot(query.toLowerCase());
+    const feats = layer.getSource().getFeatures();
+
+    const lots = [];
+    const mats = [];
+
+    feats.forEach(f => {
+      const lot = normalizeLot((f.get('NoLot') || '').toLowerCase());
+      const mat = (f.get('Info info lot — A_Matricule') || '').toLowerCase();
+
+      if (lot.includes(q)) lots.push(f);
+      if (mat.includes(query.toLowerCase())) mats.push(f);
+    });
+
+    return {
+      lots: lots.slice(0, 3),
+      mats: mats.slice(0, 3)
+    };
+  }
+
+  // -------------------------------------------------
+  // Recherche OSM (adresses)
+  // -------------------------------------------------
+  function osmSearch(query) {
     const url =
       'https://nominatim.openstreetmap.org/search?' +
       new URLSearchParams({
         q: query + ', Boischatel, Québec, Canada',
         format: 'json',
-        limit: 5,
+        limit: 3,
         countrycodes: 'ca'
       });
 
@@ -79,68 +93,59 @@ window.addEventListener('load', function () {
   }
 
   // -------------------------------------------------
-  // Affichage suggestions (ADAPTÉ AU CSS)
+  // Zoom + surbrillance (CORRIGÉ)
   // -------------------------------------------------
-  function showSuggestions(items) {
-    suggestionsBox.innerHTML = '';
-    suggestionsBox.style.display = 'block';
-
-    items.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'search-item';
-      div.textContent = item.label;
-      div.onclick = item.action;
-      suggestionsBox.appendChild(div);
-    });
-  }
-
-  function clearSuggestions() {
-    suggestionsBox.innerHTML = '';
-    suggestionsBox.style.display = 'none';
-  }
-
-  // -------------------------------------------------
-  // Zoom précis
-  // -------------------------------------------------
-  function zoomFeature(feature) {
+  function zoomToFeature(feature) {
     highlightLayer.getSource().clear();
-    highlightLayer.getSource().addFeature(feature);
 
-    map.getView().fit(feature.getGeometry(), {
-      padding: [60, 60, 60, 60],
+    // Clone + reprojection sécuritaire
+    const geom = feature.getGeometry().clone();
+    geom.transform('EPSG:4326', map.getView().getProjection());
+
+    const clone = feature.clone();
+    clone.setGeometry(geom);
+    highlightLayer.getSource().addFeature(clone);
+
+    map.getView().fit(geom, {
+      padding: [80, 80, 80, 80],
       maxZoom: 18,
       duration: 700
     });
   }
 
   // -------------------------------------------------
-  // Recherche principale (clic bouton ou Enter)
+  // Affichage des sections
   // -------------------------------------------------
-  function runSearch() {
-    const query = input.value.trim();
-    if (!query) return;
+  function addSection(title, items) {
+    if (!items.length) return;
 
-    clearSuggestions();
+    const header = document.createElement('div');
+    header.className = 'search-section';
+    header.textContent = title;
+    box.appendChild(header);
 
-    const cadastre = cadastreSuggestions(query);
-    if (cadastre.length) {
-      zoomFeature(cadastre[0]);
-      return;
-    }
+    items.forEach(item => box.appendChild(item));
+  }
 
-    osmSuggestions(query).then(results => {
-      if (!results.length) return;
+  function createItem(label, action) {
+    const div = document.createElement('div');
+    div.className = 'search-item';
+    div.textContent = label;
+    div.onclick = action;
+    return div;
+  }
 
-      map.getView().animate({
-        center: ol.proj.fromLonLat([+results[0].lon, +results[0].lat]),
-        zoom: 16,
-        duration: 700
-      });
-    });
+  function clearBox() {
+    box.innerHTML = '';
+    box.style.display = 'none';
+  }
+
+  function showBox() {
+    box.style.display = 'block';
   }
 
   // -------------------------------------------------
-  // Suggestions temps réel
+  // Suggestions temps réel (3 sections)
   // -------------------------------------------------
   let timer;
   input.addEventListener('input', function () {
@@ -148,53 +153,83 @@ window.addEventListener('load', function () {
     clearTimeout(timer);
 
     if (query.length < 3) {
-      clearSuggestions();
+      clearBox();
       return;
     }
 
     timer = setTimeout(async () => {
-      const items = [];
+      box.innerHTML = '';
 
-      cadastreSuggestions(query).forEach(f => {
-        items.push({
-          label: `Lot ${f.get('NoLot')} — ${f.get('Info info lot — A_Matricule')}`,
-          action: () => {
-            zoomFeature(f);
-            clearSuggestions();
-          }
-        });
-      });
+      const cad = cadastreSearch(query);
+      const osm = await osmSearch(query);
 
-      const osm = await osmSuggestions(query);
-      osm.forEach(r => {
-        items.push({
-          label: r.display_name,
-          action: () => {
+      const lotItems = cad.lots.map(f =>
+        createItem(
+          `Lot ${f.get('NoLot')}`,
+          () => { zoomToFeature(f); clearBox(); }
+        )
+      );
+
+      const matItems = cad.mats.map(f =>
+        createItem(
+          `Matricule ${f.get('Info info lot — A_Matricule')}`,
+          () => { zoomToFeature(f); clearBox(); }
+        )
+      );
+
+      const addrItems = osm.map(r =>
+        createItem(
+          r.display_name,
+          () => {
             map.getView().animate({
               center: ol.proj.fromLonLat([+r.lon, +r.lat]),
               zoom: 16,
               duration: 700
             });
-            clearSuggestions();
+            clearBox();
           }
-        });
-      });
+        )
+      );
 
-      items.length ? showSuggestions(items) : clearSuggestions();
+      addSection('Lots', lotItems);
+      addSection('Matricules', matItems);
+      addSection('Adresses', addrItems);
+
+      (lotItems.length || matItems.length || addrItems.length)
+        ? showBox()
+        : clearBox();
+
     }, 300);
   });
 
   // -------------------------------------------------
-  // Events UI
+  // Recherche par Enter / bouton
   // -------------------------------------------------
-  btn.addEventListener('click', runSearch);
+  function runSearch() {
+    const q = input.value.trim();
+    if (!q) return;
 
+    const cad = cadastreSearch(q);
+    if (cad.lots.length) return zoomToFeature(cad.lots[0]);
+    if (cad.mats.length) return zoomToFeature(cad.mats[0]);
+
+    osmSearch(q).then(r => {
+      if (!r.length) return;
+      map.getView().animate({
+        center: ol.proj.fromLonLat([+r[0].lon, +r[0].lat]),
+        zoom: 16,
+        duration: 700
+      });
+    });
+  }
+
+  btn.addEventListener('click', runSearch);
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') runSearch();
   });
 
   document.addEventListener('click', e => {
-    if (!e.target.closest('#search-container')) clearSuggestions();
+    if (!e.target.closest('#search-container')) clearBox();
   });
 
 });
