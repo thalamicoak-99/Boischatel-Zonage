@@ -216,17 +216,18 @@ window.addEventListener('load', function () {
   // -------------------------------------------------
   function runAddressSearch(query) {
       if (!query) return;
-      const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+      const url = 'https://nominatim.openstreetmap.org/search?' +
+        new URLSearchParams({
           q: query + ', Boischatel, Québec, Canada',
           format: 'json',
           limit: 5,
-          countrycodes: 'ca',
-      });
+          countrycodes: 'ca'
+        });
   
       fetch(url)
-          .then(response => response.json())
-          .then(data => console.log(data))
-          .catch(error => console.error(error));
+        .then(r => r.json())
+        .then(results => displayAddressSuggestions(results))
+        .catch(err => console.error("Erreur recherche adresse :", err));
   }
    
   // -------------------------------------------------
