@@ -186,8 +186,8 @@ window.addEventListener('load', function () {
   function zoomToAddress(lon, lat) {
     map.getView().animate({
       center: ol.proj.fromLonLat([parseFloat(lon), parseFloat(lat)]),
-      zoom: 16,
-      duration: 700
+      zoom: 24,
+      duration: 600
     });
   }
 
