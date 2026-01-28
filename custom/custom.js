@@ -3,68 +3,26 @@ window.addEventListener('load', function () {
   const map = window.map || window.map_1 || window.map_2;
   if (!map) return;
 
-  // -------------------------------------------------
+  const input = document.getElementById('search-input');
+  const suggestionsBox = document.getElementById('search-suggestions');
+
+  // ------------------------------
   // Couche de surbrillance
-  // -------------------------------------------------
+  // ------------------------------
   const highlightLayer = new ol.layer.Vector({
     source: new ol.source.Vector(),
     style: new ol.style.Style({
-      stroke: new ol.style.Stroke({
-        color: 'rgba(255,0,0,0.9)',
-        width: 3
-      }),
-      fill: new ol.style.Fill({
-        color: 'rgba(255,0,0,0.25)'
-      })
+      stroke: new ol.style.Stroke({ color: 'red', width: 3 }),
+      fill: new ol.style.Fill({ color: 'rgba(255,0,0,0.25)' })
     })
   });
   map.addLayer(highlightLayer);
 
-  // -------------------------------------------------
-  // Recherche OSM (TOUJOURS DISPONIBLE)
-  // -------------------------------------------------
-  function searchOSM(query) {
-    const url =
-      'https://nominatim.openstreetmap.org/search?' +
-      new URLSearchParams({
-        q: query + ', Boischatel, Québec, Canada',
-        format: 'json',
-        limit: 5,
-        countrycodes: 'ca'
-      });
-
-    fetch(url, {
-      headers: {
-        'Accept': 'application/json'
-      }
-    })
-    .then(r => r.json())
-    .then(results => {
-      if (!results.length) {
-        alert('Aucun résultat trouvé');
-        return;
-      }
-
-      const lon = parseFloat(results[0].lon);
-      const lat = parseFloat(results[0].lat);
-
-      map.getView().animate({
-        center: ol.proj.fromLonLat([lon, lat]),
-        zoom: 16,
-        duration: 700
-      });
-    })
-    .catch(err => {
-      console.error('Erreur Nominatim', err);
-    });
-  }
-
-  // -------------------------------------------------
-  // Recherche cadastrale (SAFE)
-  // -------------------------------------------------
-  function searchCadastre(query) {
-
-    let cadastreLayer = null;
+  // ------------------------------
+  // Trouver la couche cadastre
+  // ------------------------------
+  function getCadastreLayer() {
+    let layerFound = null;
 
     map.getLayers().forEach(layer => {
       const src = layer.getSource && layer.getSource();
@@ -74,63 +32,142 @@ window.addEventListener('load', function () {
       if (!feats.length) return;
 
       const props = feats[0].getProperties();
-      if (
-        props['NoLot'] !== undefined &&
-        props['Info info lot — A_Matricule'] !== undefined
-      ) {
-        cadastreLayer = layer;
+      if (props['NoLot'] !== undefined &&
+          props['Info info lot — A_Matricule'] !== undefined) {
+        layerFound = layer;
       }
     });
 
-    if (!cadastreLayer) return null;
-
-    const features = cadastreLayer.getSource().getFeatures();
-
-    const results = features.filter(f => {
-      const lot = (f.get('NoLot') || '').toString();
-      const mat = (f.get('Info info lot — A_Matricule') || '').toString();
-
-      return (
-        lot.toLowerCase().includes(query.toLowerCase()) ||
-        mat.toLowerCase().includes(query.toLowerCase())
-      );
-    });
-
-    return results.length ? results[0] : null;
+    return layerFound;
   }
 
-  // -------------------------------------------------
-  // Fonction principale
-  // -------------------------------------------------
-  function search() {
-    const query = document.getElementById('search-input').value.trim();
-    if (!query) return;
+  // ------------------------------
+  // Recherche cadastre (suggestions)
+  // ------------------------------
+  function searchCadastreSuggestions(query) {
+    const layer = getCadastreLayer();
+    if (!layer) return [];
 
-    highlightLayer.getSource().clear();
+    const feats = layer.getSource().getFeatures();
+    const q = query.toLowerCase();
 
-    // 1️⃣ Essai cadastral (non bloquant)
-    const feature = searchCadastre(query);
+    return feats
+      .filter(f => {
+        return (
+          (f.get('NoLot') || '').toLowerCase().includes(q) ||
+          (f.get('Info info lot — A_Matricule') || '').toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 5);
+  }
 
-    if (feature) {
-      map.getView().fit(feature.getGeometry(), {
-        maxZoom: 18,
-        duration: 700
+  // ------------------------------
+  // Recherche OSM (suggestions)
+  // ------------------------------
+  function searchOSMSuggestions(query) {
+    const url =
+      'https://nominatim.openstreetmap.org/search?' +
+      new URLSearchParams({
+        q: query + ', Boischatel, Québec, Canada',
+        format: 'json',
+        addressdetails: 1,
+        limit: 5,
+        countrycodes: 'ca'
       });
 
-      highlightLayer.getSource().addFeature(feature);
+    return fetch(url).then(r => r.json());
+  }
+
+  // ------------------------------
+  // Affichage suggestions
+  // ------------------------------
+  function showSuggestions(items) {
+    suggestionsBox.innerHTML = '';
+    suggestionsBox.style.display = 'block';
+
+    items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'suggestion';
+      div.textContent = item.label;
+      div.onclick = item.action;
+      suggestionsBox.appendChild(div);
+    });
+  }
+
+  function clearSuggestions() {
+    suggestionsBox.innerHTML = '';
+    suggestionsBox.style.display = 'none';
+  }
+
+  // ------------------------------
+  // Zoom précis sur entité
+  // ------------------------------
+  function zoomToFeature(feature) {
+    highlightLayer.getSource().clear();
+    highlightLayer.getSource().addFeature(feature);
+
+    map.getView().fit(feature.getGeometry(), {
+      padding: [60, 60, 60, 60],
+      maxZoom: 18,
+      duration: 700
+    });
+  }
+
+  // ------------------------------
+  // Input en temps réel
+  // ------------------------------
+  let timeout;
+  input.addEventListener('input', function () {
+    const query = this.value.trim();
+    clearTimeout(timeout);
+
+    if (query.length < 3) {
+      clearSuggestions();
       return;
     }
 
-    // 2️⃣ Sinon → adresse
-    searchOSM(query);
-  }
+    timeout = setTimeout(async () => {
+      const suggestions = [];
 
-  // -------------------------------------------------
-  // Events
-  // -------------------------------------------------
-  document.getElementById('search-btn').addEventListener('click', search);
-  document.getElementById('search-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') search();
+      // Cadastre
+      const cadastreResults = searchCadastreSuggestions(query);
+      cadastreResults.forEach(f => {
+        suggestions.push({
+          label: `Lot ${f.get('NoLot')} — ${f.get('Info info lot — A_Matricule')}`,
+          action: () => {
+            zoomToFeature(f);
+            clearSuggestions();
+          }
+        });
+      });
+
+      // OSM
+      const osmResults = await searchOSMSuggestions(query);
+      osmResults.forEach(r => {
+        suggestions.push({
+          label: r.display_name,
+          action: () => {
+            map.getView().animate({
+              center: ol.proj.fromLonLat([+r.lon, +r.lat]),
+              zoom: 16,
+              duration: 700
+            });
+            clearSuggestions();
+          }
+        });
+      });
+
+      if (suggestions.length) showSuggestions(suggestions);
+      else clearSuggestions();
+
+    }, 300);
+  });
+
+  // ------------------------------
+  // Clic hors boîte
+  // ------------------------------
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.search-box')) clearSuggestions();
   });
 
 });
