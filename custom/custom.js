@@ -35,124 +35,142 @@ window.addEventListener('load', function () {
     return div;
   }
 
-  // -------------------------------------------------
-  // 3) Détection couche cadastre (une seule fois)
-  // -------------------------------------------------
-  let cadastreLayer = null;
-  map.getLayers().forEach(layer => {
-    if (!layer.getSource) return;
-    const src = layer.getSource();
-    if (!src || !src.getFeatures) return;
-    const feats = src.getFeatures();
-    if (!feats.length) return;
-    const props = feats[0].getProperties();
-    if (props['Info info lot — A_Matricule'] !== undefined &&
-        props['NoLot'] !== undefined) {
-      cadastreLayer = layer;
-    }
-  });
-
-  if (!cadastreLayer) {
-    console.warn("Couche cadastre non trouvée !");
-    return;
-  }
-  
-  // -------------------------------------------------
-  // 4) Couche de surbrillance
-  // -------------------------------------------------
-  const highlightLayer = new ol.layer.Vector({
-    source: new ol.source.Vector(),
-    style: new ol.style.Style({
-      stroke: new ol.style.Stroke({ color: 'rgba(255,0,0,0.9)', width: 3 }),
-      fill: new ol.style.Fill({ color: 'rgba(255,0,0,0.2)' })
-    })
-  });
-  map.addLayer(highlightLayer);
-  
-  // -------------------------------------------------
-  // 5) Zoom + surbrillance
-  // -------------------------------------------------
-  function zoomToCadastreFeature(feature) {
-    highlightLayer.getSource().clear();
-    highlightLayer.getSource().addFeature(feature);
-    const extent = feature.getGeometry().getExtent();
-    map.getView().fit(extent, { padding: [40,40,40,40], maxZoom: 18, duration: 600 });
-  }
-
   // =================================================
   // 🔹 RECHERCHE CADASTRALE (LOT / MATRICULE)
   // =================================================
   
-  function searchCadastre(query) {
-    if (!query) return [];
-    const q = normalizeCadastre(query);
-    const features = cadastreLayer.getSource().getFeatures();
-    const results = features.filter(f => {
-      const lot = normalizeCadastre(f.get('NoLot') || '');
-      const mat = normalizeCadastre(f.get('Info info lot — A_Matricule') || '');
-      return lot.includes(q) || mat.includes(q);
-    });
-    return results;
+  // -------------------------------------------------
+  // Fonction pour attendre la couche cadastre
+  // -------------------------------------------------
+  function waitForCadastreLayer(callback) {
+    const interval = setInterval(() => {
+      let cadastreLayer = null;
+      map.getLayers().forEach(layer => {
+        if (!layer.getSource || !layer.getSource().getFeatures) return;
+        const feats = layer.getSource().getFeatures();
+        if (!feats || !feats.length) return;
+        const props = feats[0].getProperties();
+        if (props['Info info lot — A_Matricule'] !== undefined &&
+            props['NoLot'] !== undefined) {
+          cadastreLayer = layer;
+        }
+      });
+
+      if (cadastreLayer) {
+        clearInterval(interval);
+        callback(cadastreLayer);
+      }
+    }, 200);
   }
+
+  // -------------------------------------------------
+  // Fonction principale cadastre
+  // -------------------------------------------------
+  function initCadastreSearch(cadastreLayer) {
+    console.log("Couche cadastre trouvée !");
+
+   // Normalisation
+      function normalizeCadastre(val) {
+        return val.toString().toLowerCase().replace(/\s+/g, '').replace(/[-–—]/g, '');
+      }
+    
+  // -------------------------------------------------
+  // Couche de surbrillance
+  // -------------------------------------------------
+  const highlightLayer = new ol.layer.Vector({
+      source: new ol.source.Vector(),
+      style: new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: 'rgba(255,0,0,0.9)', width: 3 }),
+        fill: new ol.style.Fill({ color: 'rgba(255,0,0,0.2)' })
+      })
+    });
+    map.addLayer(highlightLayer);
   
   // -------------------------------------------------
-  // 7) Affichage suggestions (max 3)
+  // Zoom
+  // -------------------------------------------------
+    function zoomToCadastreFeature(feature) {
+      highlightLayer.getSource().clear();
+      highlightLayer.getSource().addFeature(feature);
+      const extent = feature.getGeometry().getExtent();
+      map.getView().fit(extent, { padding: [40,40,40,40], maxZoom: 18, duration: 600 });
+    }
+
+  // -------------------------------------------------
+  // Fonction search couche cadastre
+  // -------------------------------------------------
+  
+  function searchCadastre(query) {
+      if (!query) return [];
+      const q = normalizeCadastre(query);
+      const features = cadastreLayer.getSource().getFeatures();
+      return features.filter(f => {
+        const lot = normalizeCadastre(f.get('NoLot') || '');
+        const mat = normalizeCadastre(f.get('Info info lot — A_Matricule') || '');
+        return lot.includes(q) || mat.includes(q);
+      });
+    }
+  
+  // -------------------------------------------------
+  // Affichage suggestions (max 3)
   // -------------------------------------------------
   function displayCadastreSuggestions(features) {
-    cadBox.innerHTML = '';
-    if (!features.length) {
-      cadBox.style.display = 'none';
-      return;
-    }
-    features.slice(0,3).forEach(f => {
-      const item = document.createElement('div');
-      item.className = 'search-item';
-      item.textContent = `Lot ${f.get('NoLot')} — ${f.get('Info info lot — A_Matricule')}`;
-      item.addEventListener('click', () => {
-        zoomToCadastreFeature(f);
-        cadBox.innerHTML = '';
-        cadBox.style.display = 'none';
+      cadBox.innerHTML = '';
+      if (!features.length) { cadBox.style.display='none'; return; }
+      features.slice(0,3).forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'search-item';
+        item.textContent = `Lot ${f.get('NoLot')} — ${f.get('Info info lot — A_Matricule')}`;
+        item.addEventListener('click', () => {
+          zoomToCadastreFeature(f);
+          cadBox.innerHTML = '';
+          cadBox.style.display = 'none';
+        });
+        cadBox.appendChild(item);
       });
-      cadBox.appendChild(item);
-    });
-    cadBox.style.display = 'block';
-  }
+      cadBox.style.display = 'block';
+    }
 
 
   // -------------------------------------------------
-  // Suggestions en temps réel + Bouton 🔍 cadastral (corrigé)
+  // Suggestions en temps réel
   // -------------------------------------------------
   let cadTimer = null;
-  cadInput.addEventListener('input', () => {
-    clearTimeout(cadTimer);
-    cadTimer = setTimeout(() => {
+    cadInput.addEventListener('input', () => {
+      clearTimeout(cadTimer);
       const val = cadInput.value.trim();
       if (!val) { cadBox.innerHTML=''; cadBox.style.display='none'; return; }
-      const results = searchCadastre(val);
-      displayCadastreSuggestions(results);
-    }, 250);
-  });
-
+      cadTimer = setTimeout(() => {
+        displayCadastreSuggestions(searchCadastre(val));
+      }, 250);
+    });
+    
   // -------------------------------------------------
-  // 9) Bouton recherche
+  // Bouton 🔍 cadastral
   // -------------------------------------------------
   cadBtn.addEventListener('click', () => {
-    const val = cadInput.value.trim();
-    if (!val) return;
-    const results = searchCadastre(val);
-    if (results.length) zoomToCadastreFeature(results[0]);
-    displayCadastreSuggestions(results);
-  });
+      const val = cadInput.value.trim();
+      if (!val) return;
+      const results = searchCadastre(val);
+      if (results.length) zoomToCadastreFeature(results[0]);
+      displayCadastreSuggestions(results);
+    });
 
   // -------------------------------------------------
   // 10) Fermer suggestions au clic hors champ
   // -------------------------------------------------
   document.addEventListener('click', e => {
-    if (!e.target.closest('#search-cadastre')) {
-      cadBox.innerHTML = '';
-      cadBox.style.display = 'none';
-    }
-  });
+      if (!e.target.closest('#search-cadastre')) {
+        cadBox.innerHTML='';
+        cadBox.style.display='none';
+      }
+    });
+  }
+
+  // -------------------------------------------------
+  // Appel de waitForCadastreLayer pour init
+  // -------------------------------------------------
+  waitForCadastreLayer(initCadastreSearch);
   
   // =================================================
   // 🔹 RECHERCHE ADRESSE (OSM)
