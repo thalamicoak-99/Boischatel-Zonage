@@ -1,33 +1,37 @@
 /* Conteneur des deux recherches côte à côte */
-#search-cadastre, #search-address {
-  position: relative;
+.flex-search-container {
   display: flex;
-  flex-direction: column;
-  width: 300px; /* tu peux ajuster la largeur */
-  font-family: sans-serif;
+  gap: 12px; /* espace entre cadastre et adresse */
 }
 
+/* Conteneur individuel input + bouton */
+#search-cadastre, #search-address {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 300px; /* ajustable */
+  position: relative;
+}
+
+/* Input */
 #search-cadastre input,
 #search-address input {
+  flex: 1; /* prend tout l'espace restant */
   padding: 6px 8px;
   font-size: 1em;
   border: 1px solid #ccc;
   border-radius: 4px;
-  width: calc(100% - 40px); /* espace pour le bouton */
   box-sizing: border-box;
 }
 
+/* Bouton */
 #search-cadastre button,
 #search-address button {
-  position: absolute;
-  right: 2px;
-  top: 2px;
-  height: 30px;
-  width: 36px;
+  padding: 6px 10px;
+  font-size: 1em;
   border: none;
   background: #007acc;
   color: white;
-  font-size: 1em;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -63,10 +67,4 @@
 
 .search-item:hover {
   background-color: #f0f0f0;
-}
-
-/* Style global pour flex container des deux recherches */
-.flex-search-container {
-  display: flex;
-  gap: 12px; /* espace entre cadastre et adresse */
 }
