@@ -4,11 +4,12 @@ window.addEventListener('load', function () {
   if (!map) return;
 
   const input = document.getElementById('search-input');
+  const btn = document.getElementById('search-btn');
   const suggestionsBox = document.getElementById('search-suggestions');
 
-  // ------------------------------
+  // -------------------------------------------------
   // Couche de surbrillance
-  // ------------------------------
+  // -------------------------------------------------
   const highlightLayer = new ol.layer.Vector({
     source: new ol.source.Vector(),
     style: new ol.style.Style({
@@ -18,11 +19,11 @@ window.addEventListener('load', function () {
   });
   map.addLayer(highlightLayer);
 
-  // ------------------------------
+  // -------------------------------------------------
   // Trouver la couche cadastre
-  // ------------------------------
+  // -------------------------------------------------
   function getCadastreLayer() {
-    let layerFound = null;
+    let found = null;
 
     map.getLayers().forEach(layer => {
       const src = layer.getSource && layer.getSource();
@@ -32,26 +33,26 @@ window.addEventListener('load', function () {
       if (!feats.length) return;
 
       const props = feats[0].getProperties();
-      if (props['NoLot'] !== undefined &&
-          props['Info info lot — A_Matricule'] !== undefined) {
-        layerFound = layer;
+      if (
+        props['NoLot'] !== undefined &&
+        props['Info info lot — A_Matricule'] !== undefined
+      ) {
+        found = layer;
       }
     });
 
-    return layerFound;
+    return found;
   }
 
-  // ------------------------------
-  // Recherche cadastre (suggestions)
-  // ------------------------------
-  function searchCadastreSuggestions(query) {
+  // -------------------------------------------------
+  // Suggestions cadastre
+  // -------------------------------------------------
+  function cadastreSuggestions(query) {
     const layer = getCadastreLayer();
     if (!layer) return [];
 
-    const feats = layer.getSource().getFeatures();
     const q = query.toLowerCase();
-
-    return feats
+    return layer.getSource().getFeatures()
       .filter(f => {
         return (
           (f.get('NoLot') || '').toLowerCase().includes(q) ||
@@ -61,16 +62,15 @@ window.addEventListener('load', function () {
       .slice(0, 5);
   }
 
-  // ------------------------------
-  // Recherche OSM (suggestions)
-  // ------------------------------
-  function searchOSMSuggestions(query) {
+  // -------------------------------------------------
+  // Suggestions OSM
+  // -------------------------------------------------
+  function osmSuggestions(query) {
     const url =
       'https://nominatim.openstreetmap.org/search?' +
       new URLSearchParams({
         q: query + ', Boischatel, Québec, Canada',
         format: 'json',
-        addressdetails: 1,
         limit: 5,
         countrycodes: 'ca'
       });
@@ -78,16 +78,16 @@ window.addEventListener('load', function () {
     return fetch(url).then(r => r.json());
   }
 
-  // ------------------------------
-  // Affichage suggestions
-  // ------------------------------
+  // -------------------------------------------------
+  // Affichage suggestions (ADAPTÉ AU CSS)
+  // -------------------------------------------------
   function showSuggestions(items) {
     suggestionsBox.innerHTML = '';
     suggestionsBox.style.display = 'block';
 
     items.forEach(item => {
       const div = document.createElement('div');
-      div.className = 'suggestion';
+      div.className = 'search-item';
       div.textContent = item.label;
       div.onclick = item.action;
       suggestionsBox.appendChild(div);
@@ -99,10 +99,10 @@ window.addEventListener('load', function () {
     suggestionsBox.style.display = 'none';
   }
 
-  // ------------------------------
-  // Zoom précis sur entité
-  // ------------------------------
-  function zoomToFeature(feature) {
+  // -------------------------------------------------
+  // Zoom précis
+  // -------------------------------------------------
+  function zoomFeature(feature) {
     highlightLayer.getSource().clear();
     highlightLayer.getSource().addFeature(feature);
 
@@ -113,38 +113,61 @@ window.addEventListener('load', function () {
     });
   }
 
-  // ------------------------------
-  // Input en temps réel
-  // ------------------------------
-  let timeout;
+  // -------------------------------------------------
+  // Recherche principale (clic bouton ou Enter)
+  // -------------------------------------------------
+  function runSearch() {
+    const query = input.value.trim();
+    if (!query) return;
+
+    clearSuggestions();
+
+    const cadastre = cadastreSuggestions(query);
+    if (cadastre.length) {
+      zoomFeature(cadastre[0]);
+      return;
+    }
+
+    osmSuggestions(query).then(results => {
+      if (!results.length) return;
+
+      map.getView().animate({
+        center: ol.proj.fromLonLat([+results[0].lon, +results[0].lat]),
+        zoom: 16,
+        duration: 700
+      });
+    });
+  }
+
+  // -------------------------------------------------
+  // Suggestions temps réel
+  // -------------------------------------------------
+  let timer;
   input.addEventListener('input', function () {
     const query = this.value.trim();
-    clearTimeout(timeout);
+    clearTimeout(timer);
 
     if (query.length < 3) {
       clearSuggestions();
       return;
     }
 
-    timeout = setTimeout(async () => {
-      const suggestions = [];
+    timer = setTimeout(async () => {
+      const items = [];
 
-      // Cadastre
-      const cadastreResults = searchCadastreSuggestions(query);
-      cadastreResults.forEach(f => {
-        suggestions.push({
+      cadastreSuggestions(query).forEach(f => {
+        items.push({
           label: `Lot ${f.get('NoLot')} — ${f.get('Info info lot — A_Matricule')}`,
           action: () => {
-            zoomToFeature(f);
+            zoomFeature(f);
             clearSuggestions();
           }
         });
       });
 
-      // OSM
-      const osmResults = await searchOSMSuggestions(query);
-      osmResults.forEach(r => {
-        suggestions.push({
+      const osm = await osmSuggestions(query);
+      osm.forEach(r => {
+        items.push({
           label: r.display_name,
           action: () => {
             map.getView().animate({
@@ -157,17 +180,21 @@ window.addEventListener('load', function () {
         });
       });
 
-      if (suggestions.length) showSuggestions(suggestions);
-      else clearSuggestions();
-
+      items.length ? showSuggestions(items) : clearSuggestions();
     }, 300);
   });
 
-  // ------------------------------
-  // Clic hors boîte
-  // ------------------------------
+  // -------------------------------------------------
+  // Events UI
+  // -------------------------------------------------
+  btn.addEventListener('click', runSearch);
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') runSearch();
+  });
+
   document.addEventListener('click', e => {
-    if (!e.target.closest('.search-box')) clearSuggestions();
+    if (!e.target.closest('#search-container')) clearSuggestions();
   });
 
 });
