@@ -221,6 +221,8 @@ window.addEventListener('load', function () {
         q: query + ', Boischatel, Québec, Canada',
         format: 'json',
         limit: 5,
+        city: 'Boischatel'
+        County: 'La Côte-de-Beaupré'
         countrycodes: 'ca'
       });
 
