@@ -14,10 +14,6 @@ window.addEventListener('load', function () {
   // -------------------------------------------------
   // Utilitaires
   // -------------------------------------------------
-  function normalizeCadastre(val) {
-    return val.toString().toLowerCase().replace(/\s+/g, '').replace(/[-–—]/g, '');
-  }
-
   function clearBox(box) {
     box.innerHTML = '';
     box.style.display = 'none';
@@ -44,23 +40,30 @@ window.addEventListener('load', function () {
   // -------------------------------------------------
   function waitForCadastreLayer(callback) {
     const interval = setInterval(() => {
-      let cadastreLayer = null;
-      map.getLayers().forEach(layer => {
-        if (!layer.getSource || !layer.getSource().getFeatures) return;
-        const feats = layer.getSource().getFeatures();
-        if (!feats || !feats.length) return;
-        const props = feats[0].getProperties();
-        if (props['Info info lot — A_Matricule'] !== undefined &&
-            props['NoLot'] !== undefined) {
-          cadastreLayer = layer;
-        }
-      });
-
+      const cadastreLayer = findCadastreLayer(map.getLayers().getArray());
       if (cadastreLayer) {
         clearInterval(interval);
         callback(cadastreLayer);
       }
     }, 200);
+  }
+  
+  function findCadastreLayer(layers) {
+    for (let layer of layers) {
+      if (layer instanceof ol.layer.Group) {
+        const found = findCadastreLayer(layer.getLayers().getArray());
+        if (found) return found;
+      } else if (layer instanceof ol.layer.Vector) {
+        const feats = layer.getSource()?.getFeatures() || [];
+        if (!feats.length) continue;
+        const props = feats[0].getProperties();
+        if (props['Info info lot — A_Matricule'] !== undefined &&
+            props['NoLot'] !== undefined) {
+          return layer;
+        }
+      }
+    }
+    return null;
   }
 
   // -------------------------------------------------
