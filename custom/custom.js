@@ -218,12 +218,12 @@ window.addEventListener('load', function () {
     if (!query) return;
     const url = 'https://nominatim.openstreetmap.org/search?' +
       new URLSearchParams({
-        q: query + ', Boischatel, Québec, Canada',
+        q: query,
         format: 'json',
         limit: 5,
+        countrycodes: 'ca',
+        state: 'Québec',
         city: 'Boischatel'
-        County: 'La Côte-de-Beaupré'
-        countrycodes: 'ca'
       });
 
     fetch(url)
