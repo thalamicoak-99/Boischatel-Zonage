@@ -49,10 +49,14 @@
     </head>
 
     <body>
-        <div id="search-container">
-          <input id="search-input" type="text" placeholder="Rechercher une adresse, un lot ou un matricule à Boischatel">
-          <button id="search-btn" title="Rechercher">🔍</button>
-          <div id="search-suggestions"></div>
+        <div id="search-cadastre" class="search-container">
+          <input id="cadastre-input" placeholder="Rechercher un lot ou un matricule">
+          <div id="cadastre-suggestions"></div>
+        </div>
+        
+        <div id="search-address" class="search-container">
+          <input id="address-input" placeholder="Rechercher une adresse">
+          <div id="address-suggestions"></div>
         </div>
 
         <div id="map">
@@ -76,5 +80,6 @@
     </body>
 
 </html>
+
 
 
