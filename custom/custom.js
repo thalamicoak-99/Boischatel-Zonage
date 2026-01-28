@@ -3,56 +3,14 @@ window.addEventListener('load', function () {
   const map = window.map || window.map_1 || window.map_2;
   if (!map) return;
 
-  const input = document.getElementById('search-input');
-  const suggestionsBox = document.getElementById('search-suggestions');
-  const searchBtn = document.getElementById('search-btn');
-  
   // -------------------------------------------------
-  // 1) RÉCUPÉRER LA COUCHE CADASTRE DANS LE GROUPE
-  // -------------------------------------------------
-  let cadastreLayer = null;
-  
-  map.getLayers().forEach(layer => {
-  
-    // On cherche le groupe
-    if (layer instanceof ol.layer.Group &&
-        layer.get('title') === 'Zone dossier de travail') {
-  
-      // On parcourt les couches du groupe
-      layer.getLayers().forEach(subLayer => {
-  
-        // qgis2web donne souvent le nom ici
-        if (subLayer.getSource &&
-            subLayer.getSource() instanceof ol.source.Vector) {
-  
-          const feats = subLayer.getSource().getFeatures();
-          if (!feats.length) return;
-  
-          const props = feats[0].getProperties();
-  
-          // Signature du cadastre
-          if (props['NoLot'] !== undefined &&
-              props['Info info lot — A_Matricule'] !== undefined) {
-            cadastreLayer = subLayer;
-          }
-        }
-      });
-    }
-  });
-  
-  if (!cadastreLayer) {
-    console.warn("Couche cadastre non trouvée !");
-    return;
-  }
-  
-  // -------------------------------------------------
-  // 2) COUCHE DE SURBRILLANCE (CORRIGÉE)
+  // Couche de surbrillance
   // -------------------------------------------------
   const highlightLayer = new ol.layer.Vector({
     source: new ol.source.Vector(),
     style: new ol.style.Style({
       stroke: new ol.style.Stroke({
-        color: '#ff0000',
+        color: 'rgba(255,0,0,0.9)',
         width: 3
       }),
       fill: new ol.style.Fill({
@@ -60,93 +18,119 @@ window.addEventListener('load', function () {
       })
     })
   });
-
   map.addLayer(highlightLayer);
 
   // -------------------------------------------------
-  // 3) NORMALISATION (espaces, tirets, etc.)
+  // Recherche OSM (TOUJOURS DISPONIBLE)
   // -------------------------------------------------
-  function normalize(val) {
-    return val
-      .toString()
-      .toLowerCase()
-      .replace(/[^0-9a-z]/g, '');
-  }
-
-  // -------------------------------------------------
-  // 4) RECHERCHE FLEXIBLE DANS LE CADASTRE
-  // -------------------------------------------------
-  function searchCadastre(query) {
-    const q = normalize(query);
-    if (!q) return [];
-
-    return cadastreLayer.getSource().getFeatures().filter(f => {
-      const lot = normalize(f.get('NoLot') || '');
-      const mat = normalize(f.get('Info info lot — A_Matricule') || '');
-      return lot.includes(q) || mat.includes(q);
-    });
-  }
-
-  // -------------------------------------------------
-  // 5) AFFICHER SUGGESTIONS (3 MAX)
-  // -------------------------------------------------
-  function showSuggestions(features) {
-    suggestionsBox.innerHTML = '';
-
-    features.slice(0, 3).forEach(f => {
-      const div = document.createElement('div');
-      div.className = 'search-item';
-
-      div.textContent =
-        `Lot ${f.get('NoLot')} — ${f.get('Info info lot — A_Matricule')}`;
-
-      div.addEventListener('click', () => {
-        selectFeature(f);
-        suggestionsBox.innerHTML = '';
+  function searchOSM(query) {
+    const url =
+      'https://nominatim.openstreetmap.org/search?' +
+      new URLSearchParams({
+        q: query + ', Boischatel, Québec, Canada',
+        format: 'json',
+        limit: 5,
+        countrycodes: 'ca'
       });
 
-      suggestionsBox.appendChild(div);
+    fetch(url, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    })
+    .then(r => r.json())
+    .then(results => {
+      if (!results.length) {
+        alert('Aucun résultat trouvé');
+        return;
+      }
+
+      const lon = parseFloat(results[0].lon);
+      const lat = parseFloat(results[0].lat);
+
+      map.getView().animate({
+        center: ol.proj.fromLonLat([lon, lat]),
+        zoom: 16,
+        duration: 700
+      });
+    })
+    .catch(err => {
+      console.error('Erreur Nominatim', err);
     });
   }
 
   // -------------------------------------------------
-  // 6) SÉLECTION + ZOOM ADAPTÉ À L’ENTITÉ
+  // Recherche cadastrale (SAFE)
   // -------------------------------------------------
-  function selectFeature(feature) {
+  function searchCadastre(query) {
+
+    let cadastreLayer = null;
+
+    map.getLayers().forEach(layer => {
+      const src = layer.getSource && layer.getSource();
+      if (!src || !src.getFeatures) return;
+
+      const feats = src.getFeatures();
+      if (!feats.length) return;
+
+      const props = feats[0].getProperties();
+      if (
+        props['NoLot'] !== undefined &&
+        props['Info info lot — A_Matricule'] !== undefined
+      ) {
+        cadastreLayer = layer;
+      }
+    });
+
+    if (!cadastreLayer) return null;
+
+    const features = cadastreLayer.getSource().getFeatures();
+
+    const results = features.filter(f => {
+      const lot = (f.get('NoLot') || '').toString();
+      const mat = (f.get('Info info lot — A_Matricule') || '').toString();
+
+      return (
+        lot.toLowerCase().includes(query.toLowerCase()) ||
+        mat.toLowerCase().includes(query.toLowerCase())
+      );
+    });
+
+    return results.length ? results[0] : null;
+  }
+
+  // -------------------------------------------------
+  // Fonction principale
+  // -------------------------------------------------
+  function search() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) return;
+
     highlightLayer.getSource().clear();
-    highlightLayer.getSource().addFeature(feature);
 
-    map.getView().fit(feature.getGeometry().getExtent(), {
-      padding: [50, 50, 50, 50],
-      duration: 700,
-      maxZoom: 18
-    });
+    // 1️⃣ Essai cadastral (non bloquant)
+    const feature = searchCadastre(query);
+
+    if (feature) {
+      map.getView().fit(feature.getGeometry(), {
+        maxZoom: 18,
+        duration: 700
+      });
+
+      highlightLayer.getSource().addFeature(feature);
+      return;
+    }
+
+    // 2️⃣ Sinon → adresse
+    searchOSM(query);
   }
 
   // -------------------------------------------------
-  // 7) SAISIE TEMPS RÉEL
+  // Events
   // -------------------------------------------------
-  input.addEventListener('input', () => {
-    const results = searchCadastre(input.value);
-    results.length ? showSuggestions(results) : suggestionsBox.innerHTML = '';
-  });
-
-  // -------------------------------------------------
-  // 8) BOUTON 🔍 + ENTER
-  // -------------------------------------------------
-  searchBtn.addEventListener('click', () => {
-    const results = searchCadastre(input.value);
-
-    if (results.length === 1) {
-      selectFeature(results[0]);
-      suggestionsBox.innerHTML = '';
-    } else if (results.length > 1) {
-      showSuggestions(results);
-    }
-  });
-
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') searchBtn.click();
+  document.getElementById('search-btn').addEventListener('click', search);
+  document.getElementById('search-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') search();
   });
 
 });
