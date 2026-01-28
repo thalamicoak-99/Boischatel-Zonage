@@ -215,23 +215,26 @@ window.addEventListener('load', function () {
   // 5) Recherche via Nominatim
   // -------------------------------------------------
   function runAddressSearch(query) {
-    if (!query) return;
-    const url = 'https://nominatim.openstreetmap.org/search?' +
-      new URLSearchParams({
-        q: query,
-        format: 'json',
-        limit: 5,
-        countrycodes: 'ca',
-        state: 'Québec',
-        city: 'Boischatel'
-      });
-
-    fetch(url)
-      .then(r => r.json())
-      .then(results => displayAddressSuggestions(results))
-      .catch(err => console.error("Erreur recherche adresse :", err));
-  }
+      if (!query) return;
   
+      // Exemple de rectangle : sud-ouest (long_min, lat_min) et nord-est (long_max, lat_max)
+      const viewbox = '-71.20998,46.94064,-71.08909,46.89276'; // ajuster selon la zone de Boischatel
+
+      const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({
+          q: query + ', Boischatel, Québec, Canada',
+          format: 'json',
+          limit: 5,
+          countrycodes: 'ca',
+          viewbox: viewbox,
+          bounded: 1
+      });
+  
+      fetch(url)
+          .then(response => response.json())
+          .then(data => console.log(data))
+          .catch(error => console.error(error));
+  }
+   
   // -------------------------------------------------
   // Suggestions en temps réel 
   // -------------------------------------------------
