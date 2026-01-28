@@ -218,17 +218,12 @@ window.addEventListener('load', function () {
   function runAddressSearch(query) {
    if (!query) return;
 
-    // Exemple de rectangle : sud-ouest (long_min, lat_min) et nord-est (long_max, lat_max)
-    const view = '46.94249,-71.20995,46.89393,-71.09117'; // ajuster selon la zone de Boischatel
-
       const url = 'https://nominatim.openstreetmap.org/search?' +
         new URLSearchParams({
           q: query + ', Boischatel, Québec, Canada',
           format: 'json',
           limit: 5,
           countrycodes: 'ca'
-          viewbox: view,
-          bounded: 1
         });
   
       fetch(url)
